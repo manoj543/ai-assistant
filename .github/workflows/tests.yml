@@ -1,12 +1,57 @@
-name: Tests
-on: [push, pull_request]
+name: Tests and Render deployment
+"on":
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      AI_PROVIDER: ollama
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install -r requirements.txt
+      - run: python -m pip install -r requirements-lock.txt
       - run: python -m unittest discover -s tests -v
+      - run: node --check app/static/chat.js
+      - run: docker build -t ai-assistant-ci .
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request Render deployment of the tested commit
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PYCODE'
+          import os
+          import urllib.parse
+          import urllib.request
+          hook = os.environ.get("RENDER_DEPLOY_HOOK_URL", "")
+          if not hook:
+              print("Deployment skipped: add RENDER_DEPLOY_HOOK_URL after creating the Render service.")
+              raise SystemExit(0)
+          parsed = urllib.parse.urlsplit(hook)
+          if parsed.scheme != "https" or parsed.hostname != "api.render.com":
+              raise SystemExit("Invalid Render deploy hook configuration")
+          query = urllib.parse.parse_qs(parsed.query)
+          query["ref"] = [os.environ["COMMIT_SHA"]]
+          url = urllib.parse.urlunsplit(parsed._replace(query=urllib.parse.urlencode(query, doseq=True)))
+          try:
+              request = urllib.request.Request(url, method="POST")
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  if response.status not in (200, 201, 202):
+                      raise ValueError("Unexpected deploy response")
+          except Exception:
+              raise SystemExit("Render deployment request failed. Check the secret and Render dashboard.") from None
+          print("Render accepted the deployment request. Check its dashboard for build and live status.")
+          PYCODE

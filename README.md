@@ -1,152 +1,199 @@
-# Everyday AI — a simple chat assistant
+# AI Assistant — Render + Groq
 
-A small, repository-ready Python project: FastAPI serves a responsive HTML/CSS/JavaScript chat interface and forwards conversations to a locally running Ollama model. No paid API key, LangChain, database, or frontend build step is required.
+A FastAPI chat assistant with a browser UI, Groq for online inference, and optional
+Ollama for local development. Docker runs only the web app; no model download or
+GPU is required on Render. Includes a GitHub Pages chat page and tested-commit
+Render deploy hook workflow.
 
-## What it does
+## 1. Put the project in GitHub
 
-- Polite, clear answers guided by an editable system prompt.
-- Follow-up questions with recent conversation context (up to ten preceding exchanges, reduced when the character budget is reached).
-- New-chat button, example questions, busy indicator, and actionable connection/model errors.
-- Separate history per browser tab, in memory only; reload clears it.
-- Input validation, timeouts, plain-text rendering, API tests, and GitHub Actions.
+Extract the ZIP. Copy the **contents** of `ai-assistant-render-groq/` to the root
+of your backend GitHub repository. Include `.github/`, `Dockerfile`,
+`render.yaml`, and `requirements-lock.txt`. Do not commit real keys or `.env`.
+The workflow assumes your deployment branch is `main`.
 
-The assistant has no live search, document retrieval, tools, or permanent memory. Answer quality depends on the model and question; it cannot guarantee correct or satisfying answers. Responses appear when generation completes rather than token by token. Long answers can stop at the configured output limit; ask the assistant to continue.
+## 2. Create a Groq key
 
-## Quick start on Windows (PowerShell)
+Create/sign in to https://console.groq.com and generate an API key at
+https://console.groq.com/keys. Keep your account on the Free plan for this demo.
+Do not paste the key into chat, JavaScript, a workflow, or the repository.
+Set it only in Render's secret environment settings.
 
-Prerequisites: Python 3.11+ and an installed, running Ollama. Open the extracted project folder in VS Code or PyCharm; use its terminal.
+The configured model is `openai/gpt-oss-20b`. Check your account's Models and
+Limits pages before deployment; availability and free limits can change.
+Change GROQ_MODEL if necessary to a compatible chat-completions model available
+to your account. There is no live web search or external tool execution here.
+Requests include conversation history and are processed by Groq.
 
-```powershell
-ollama pull qwen3:4b
-python -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+## 3. Create the Render free service
+
+Sign in at https://dashboard.render.com and connect your GitHub account.
+Choose **New → Blueprint**, select this backend repository, and use the root
+`render.yaml`. Review that the web service plan is **Free** before creating it.
+If the service name is unavailable, choose another name in render.yaml.
+
+When prompted, enter:
+
+| Setting | Value |
+|---|---|
+| GROQ_API_KEY | Your secret Groq API key |
+| ALLOWED_ORIGINS | `https://YOUR-USERNAME.github.io` |
+
+ALLOWED_ORIGINS is the **origin**, with no repository path: for
+`https://manoj.github.io/portfolio/`, enter `https://manoj.github.io`.
+For a custom portfolio domain, enter its HTTPS origin instead. Multiple origins
+can be comma separated. Do not use `*`. This controls browser access; CORS is
+not authentication and cannot prevent direct API calls.
+
+The Blueprint sets AI_PROVIDER=groq, GROQ_MODEL=openai/gpt-oss-20b,
+REQUESTS_PER_MINUTE=10, and MAX_CONCURRENT_REQUESTS=2.
+Render builds the Dockerfile, injects its PORT, and checks `/health`.
+The process runs one Uvicorn worker, as required by the in-memory demo limits.
+The initial service creation deploys the app. Subsequent automatic deploys are
+disabled so GitHub Actions can test before requesting deployment.
+
+If you prefer **New → Web Service** instead of a Blueprint: select the repo,
+branch `main`, language/runtime **Docker**, Dockerfile `./Dockerfile`, and
+**Free** instance. Enter all six environment settings above, set health check
+path `/health`, and turn Auto-Deploy **Off**. Do not create both services.
+
+After a successful build, copy the actual service URL Render assigns, e.g.
+`https://manoj-ai-assistant-xxxx.onrender.com`. Open `/health` and then `/`.
+The root URL already contains a working chat page. Test one short question.
+`/health` checks the process, not the validity of your Groq credentials.
+
+## 4. Connect your existing GitHub Pages portfolio
+
+Two options:
+
+### Easiest: link to the complete Render chat page
+
+Add this to your existing portfolio HTML, substituting your real Render URL:
+
+```html
+<a href="https://YOUR-SERVICE.onrender.com" target="_blank" rel="noopener">
+  Chat with my AI assistant
+</a>
 ```
 
-Open **http://127.0.0.1:8000**. Keep the terminal running. Stop with Ctrl+C. If `ollama` is unrecognized, reopen your terminal after installing Ollama and check its PATH. If Ollama is not running, open the Ollama app or run `ollama serve` in another terminal. Do not start a second Ollama server if one is already listening.
+No frontend copying is required. The chat interface and API share the Render origin.
 
-For macOS/Linux:
+### Host the chat page inside your GitHub Pages website
 
-```bash
-ollama pull qwen3:4b
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-The first response may be slow while the model loads. Hardware affects response speed. This app disables thinking output for the default Qwen model and caps generation at 768 tokens.
-
-## Configure
-
-Set environment variables **before** launching the server. `.env.example` documents available values; it is not automatically loaded.
-
-```powershell
-$env:OLLAMA_URL = "http://127.0.0.1:11434"
-$env:OLLAMA_MODEL = "qwen3:4b"
-```
-
-On Linux/macOS use `export OLLAMA_MODEL="qwen3:4b"`. Download any replacement model with `ollama pull MODEL_NAME`. The app sends `think: false`; adapt this setting if your replacement model does not support it.
-
-Edit `SYSTEM_PROMPT` in `app/main.py` to adjust the assistant's tone and scope. Adjust `num_predict`, `num_ctx`, and timeout there if needed. Character limits are not exact token limits; multilingual text and long conversations may exceed the model context budget. Start a new chat if the model loses context.
-
-## Project structure
+Copy **the contents** of `github-pages/` into a new `chat/` directory in your
+existing portfolio repository. The result must be:
 
 ```text
-app/main.py                FastAPI routes, validation, model adapter, prompt
-app/static/index.html      Chat page
-app/static/style.css       Responsive styling
-app/static/chat.js         Chat state and API requests
-tests/test_chat.py         Offline API and provider-adapter tests
-.github/workflows/tests.yml GitHub CI
-Dockerfile                 Optional container for the Python app
-requirements.txt           Compatible dependency ranges
-.env.example               Environment variable reference
+chat/index.html
+chat/static/style.css
+chat/static/chat.js
+chat/static/config.js
 ```
 
-Flow: browser → POST /api/chat → FastAPI → Ollama /api/chat → answer → browser.
+Edit `chat/static/config.js`:
 
-The backend has no shared conversation store. Each request supplies its own history. No messages are deliberately written to disk by this app; model-server and hosting logs are separate. The public API accepts only user/assistant messages and adds the system prompt on the server. Prompt instructions are behavioral guidance, not a security boundary.
-
-## API
-
-Interactive API docs: **http://127.0.0.1:8000/docs**. `/health` checks the Python process only, not model readiness.
-
-Example body for `POST /api/chat`:
-
-```json
-{"messages":[{"role":"user","content":"Explain Python decorators with a simple example."}]}
+```javascript
+window.CHAT_API_BASE_URL = "https://YOUR-SERVICE.onrender.com";
 ```
 
-Response:
+This is a public URL, not a secret. Never add the Groq key there.
+Commit and publish using your existing Pages deployment process. Add this link
+to the portfolio (adjust if your portfolio uses a different directory layout):
 
-```json
-{"reply":"A decorator is ..."}
+```html
+<a href="./chat/">Chat with my AI assistant</a>
 ```
 
-History must alternate user/assistant, starting and ending with user. Maximum 21 messages, 8,000 characters per message, 24,000 characters total. The browser automatically removes older complete turns to fit those limits.
+For a project site the chat URL will be
+`https://YOUR-USERNAME.github.io/YOUR-PORTFOLIO-REPO/chat/`.
+Configure Render ALLOWED_ORIGINS using only `https://YOUR-USERNAME.github.io`.
+The included relative asset paths work under that project subdirectory.
 
-## Tests
+## 5. Enable GitHub Actions deployment
+
+The existing `.github/workflows/tests.yml` now runs tests, JavaScript syntax
+checks, and a Docker build. It requests a Render deployment only for `main`
+after all checks succeed, including for a manual run on `main`.
+
+1. In Render open your service → **Settings → Deploy Hook** and copy the secret URL.
+2. In the **backend** GitHub repo open **Settings → Secrets and variables →
+   Actions → New repository secret**.
+3. Name: `RENDER_DEPLOY_HOOK_URL`. Value: the complete Render hook URL.
+4. Push a change to `main` or use **Actions → Tests and Render deployment →
+   Run workflow** on `main`.
+5. Check Render's **Events/Logs** until the deployment is live.
+
+The hook includes the tested commit SHA (`ref`), preventing a later untested
+commit from being substituted. GitHub Actions checks and builds a local Docker
+image; Render then builds that same commit using the Dockerfile. No GHCR or
+Docker Hub account is needed. A successful hook request means **deployment
+accepted**, not deployment live. Check Render for build failures. The initial
+Blueprint deploy is performed before this workflow is configured.
+
+If the secret is absent, CI still runs and prints a clear deployment-skipped
+message. Pull requests never receive or use the deploy hook secret. Do not
+share this hook URL; it authorizes deployment. Rotate it in Render if exposed.
+Do not duplicate the workflow in a second file or enable Render auto-deploy
+while using this hook approach.
+
+## Local testing (PowerShell)
 
 ```powershell
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements-lock.txt
+$env:AI_PROVIDER = "groq"
+$env:GROQ_API_KEY = "YOUR-KEY"
+$env:GROQ_MODEL = "openai/gpt-oss-20b"
+.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8081
+```
+
+Open http://127.0.0.1:8081. If entering a key into your shell, be aware your shell
+may retain command history. Prefer your IDE's private environment configuration.
+The app reads process environment variables; it does not automatically load `.env`.
+
+To use the original local model instead:
+
+```powershell
+$env:AI_PROVIDER = "ollama"
+$env:OLLAMA_MODEL = "qwen3:4b"
+ollama pull qwen3:4b
+.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8081
+```
+
+For automated tests, set AI_PROVIDER=ollama so no key or live model is needed:
+
+```powershell
+$env:AI_PROVIDER = "ollama"
 .venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-Tests mock the model server and need no GPU or Ollama installation. A real-model smoke test is separate: start Ollama and the app, ask a question, then ask a follow-up referring to it. Try New chat and confirm the previous conversation disappears.
+## Limits and troubleshooting
 
-## Push to your GitHub repository
+- Render Free sleeps after 15 minutes without traffic; wake-up can take roughly
+  a minute. Do not run artificial keep-alive jobs to bypass the free-service behavior.
+- Free Render and Groq quotas apply independently. Keep paid upgrades disabled
+  if you want a free-only demo. Review current account limits before launch.
+- The global 10-requests/minute limit is shared by all visitors; it is not a
+  per-user quota. Up to two model calls run at once. These in-memory limits reset
+  on restart and do not coordinate across multiple workers or instances.
+- This is a small public demo without user login or durable chat storage. It
+  does not provide a complete abuse-prevention or multi-user production system.
+- 429: local demo cap or Groq quota reached. Retry later; shorten questions and
+  start a new chat to reduce tokens. No automatic retries consume additional quota.
+- 503 authorization error: check GROQ_API_KEY in Render and save/redeploy.
+- 503 model unavailable: check GROQ_MODEL against your Groq account's models.
+- 502: provider error/malformed answer. Check configuration and try again.
+- Chat on Render works but Pages fails: check config.js URL, HTTPS, and
+  ALLOWED_ORIGINS. Use browser Network tools to inspect the preflight and POST.
+- No deploy after push: confirm branch `main`, CI success, and the deploy hook
+  secret in the backend repository. Inspect Render Events for the requested commit.
+- To roll back on a free service, revert the problematic commit in GitHub and
+  push the revert through this tested deployment flow.
 
-Create an empty repository on GitHub, then run these from the folder containing this README. Replace the placeholder URL with your repository URL.
+## References
 
-```bash
-git init
-git add .
-git commit -m "Add simple Ollama AI chat assistant"
-git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/ai-assistant.git
-git push -u origin main
-```
-
-If using an existing repository, copy the project files into it and use its current Git setup. Do not commit `.venv` or secrets. requirements.txt provides compatible ranges. requirements-lock.txt records the exact versions used for the passing tests; install it with pip install -r requirements-lock.txt to reproduce that environment (Python 3.12).
-
-**GitHub stores this code; GitHub Pages cannot run the Python backend or Ollama.** To host a working assistant, run both on a suitable server with adequate memory/CPU/GPU. A cloud server cannot reach Ollama on your laptop using `localhost`: configure a private reachable model endpoint instead.
-
-## Optional Docker deployment
-
-Run Ollama on the Docker host and download the model first. Build the app:
-
-```bash
-docker build -t everyday-ai .
-```
-
-On Docker Desktop (Windows/macOS), run:
-
-```bash
-docker run --rm -p 127.0.0.1:8000:8000 -e OLLAMA_URL=http://host.docker.internal:11434 -e OLLAMA_MODEL=qwen3:4b everyday-ai
-```
-
-Ollama must accept connections from the container. Depending on host configuration, its loopback-only default may need changing. If changing its bind address, use a firewall to restrict access to your trusted host/container network. Do not expose its unauthenticated API directly to the internet.
-
-On Linux, a local alternative is:
-
-```bash
-docker run --rm --network host -e OLLAMA_URL=http://127.0.0.1:11434 everyday-ai
-```
-
-Host networking on Linux binds this app on all host interfaces at port 8000, so restrict it with a firewall. The Docker image contains the app only; it does not contain Ollama or model weights. Container build and real-model operation should be validated on your deployment machine.
-
-## Before allowing public users
-
-This starter is intended for local/private use. Add authentication, per-user rate limits, concurrency/queue limits, request-size limits at your reverse proxy, HTTPS, and appropriate privacy controls before public hosting. The current input limits are validated after JSON parsing and are not a transport-level body-size limit. Keep Ollama private. It has no user accounts, abuse monitoring, durable chat storage, or production capacity management.
-
-For a small private server, the Python process can be started with:
-
-```bash
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-
-Use a process manager and an HTTPS reverse proxy when hosting. Do not use `--reload` in production.
-
-## Official references
-
-- https://docs.ollama.com/api/chat
-- https://fastapi.tiangolo.com/deployment/manually/
+- https://render.com/docs/free
+- https://render.com/docs/blueprint-spec
+- https://render.com/docs/deploy-hooks
+- https://console.groq.com/docs/models
+- https://console.groq.com/docs/rate-limits

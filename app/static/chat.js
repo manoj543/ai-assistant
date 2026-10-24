@@ -1,3 +1,4 @@
+const API_BASE_URL = (window.CHAT_API_BASE_URL || "").replace(/\/$/, "");
 const chat = document.querySelector('#chat');
 const input = document.querySelector('#message');
 const send = document.querySelector('#send');
@@ -25,13 +26,13 @@ async function submit(event) {
   busy = true; send.disabled = true; clear.disabled = true; input.disabled = true;
   welcome.hidden = true;
   const pending = bubble('user', text);
-  status.textContent = 'Thinking… The first reply can take longer while the model loads.';
+  status.textContent = 'Thinking… A sleeping demo server may take about a minute to start.';
   // Keep complete pairs, reserving room for the newest user turn.
   let context = history.slice(-20);
   while (context.length && context.reduce((n, m) => n + m.content.length, 0) + text.length > 24000) context = context.slice(2);
   const messages = [...context, {role: 'user', content: text}];
   try {
-    const response = await fetch('/api/chat', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({messages}), signal: AbortSignal.timeout(190000)});
+    const response = await fetch(`${API_BASE_URL}/api/chat`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({messages}), signal: AbortSignal.timeout(190000)});
     const data = await response.json();
     if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Message rejected. Shorten your question and try again.');
     bubble('assistant', data.reply);

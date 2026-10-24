@@ -9,6 +9,8 @@ from app.main import app, generate_reply, Message
 
 class ApiTests(unittest.TestCase):
     def setUp(self):
+        from app.main import recent_requests
+        recent_requests.clear()
         self.client = TestClient(app)
 
     def test_page_and_health(self):

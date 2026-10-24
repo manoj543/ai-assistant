@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: manoj-ai-assistant
+    runtime: docker
+    plan: free
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: "off"
+    envVars:
+      - key: AI_PROVIDER
+        value: groq
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-20b
+      - key: GROQ_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: REQUESTS_PER_MINUTE
+        value: "10"
+      - key: MAX_CONCURRENT_REQUESTS
+        value: "2"
