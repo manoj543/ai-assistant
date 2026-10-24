@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 from typing import Literal
+from dotenv import load_dotenv
 
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -9,6 +10,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
 BASE = Path(__file__).parent
 MODEL = os.getenv("OLLAMA_MODEL", "qwen3:4b")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
